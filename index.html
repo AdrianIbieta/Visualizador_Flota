@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visualizador Flota Cerquera Industrial Talcahuano</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --panel: #ffffff;
+      --panel-soft: #f9fafb;
+      --accent: #0284c7;
+      --accent-soft: rgba(2, 132, 199, 0.08);
+      --accent-border: rgba(2, 132, 199, 0.35);
+      --text: #000000;
+      --muted: #111827;
+      --border-subtle: #e5e7eb;
+      --shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; height: 100vh; overflow: hidden;
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background: radial-gradient(circle at top,#e0f2fe 0,#f3f4f6 55%);
+      color: var(--text); display:flex; flex-direction:column;
+    }
+    header {
+      padding:6px 12px; border-bottom:1px solid var(--border-subtle);
+      display:flex; align-items:center; gap:10px;
+      background:rgba(255,255,255,0.9); backdrop-filter:blur(12px);
+    }
+    header h1 { margin:0; font-size:clamp(13px, 1.7vw, 16px); font-weight:600; letter-spacing:.02em; }
+    header .subtitle { font-size:clamp(10px, 1.3vw, 12px); color:var(--muted); }
+    .data-info { font-size:clamp(10px, 1.2vw, 11px); color:var(--muted); margin-top:2px; }
+    .pill {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 10px; border-radius:999px; font-size:11px;
+      background:var(--panel-soft); border:1px solid var(--border-subtle); box-shadow: var(--shadow-soft);
+    }
+    .pill-dot { width:8px; height:8px; border-radius:999px; background:var(--accent); }
+    #fileInput {
+      padding:6px 8px; font-size:12px; border-radius:999px;
+      border:1px solid var(--border-subtle); background:var(--panel-soft); color:var(--text);
+    }
+    main {
+      flex:1; display:grid; grid-template-columns: minmax(320px, 1.7fr) minmax(360px, 1.5fr);
+      gap:6px; padding:6px; min-height:0;
+    }
+    #sidebar {
+      background:var(--panel); border-radius:12px; padding:6px 8px;
+      border:1px solid var(--border-subtle); display:flex; flex-direction:column; min-height:0; box-shadow: var(--shadow-soft);
+    }
+    #sidebar header {
+      padding:0 0 6px 0; border-bottom:1px solid var(--border-subtle);
+      margin-bottom:6px; background:none; backdrop-filter:none;
+    }
+    #sidebar h2 { margin:0; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+    #summary { font-size:11px; color:var(--text); margin-top:4px; }
+    #vesselList {
+      list-style:none; padding:0; margin:4px 0 0 0;
+      column-count:4;
+      column-gap:6px;
+    }
+    #vesselList li {
+      display:inline-block; width:100%;
+      padding:3px 4px; border-radius:7px; margin:0;
+      cursor:pointer; border:1px solid transparent; background:transparent;
+      transition:background 120ms ease,border-color 120ms ease,transform 80ms ease;
+      font-size:10px;
+    }
+    #vesselList li:hover { background:#e5f2ff; border-color:#bfdbfe; transform:translateY(-1px); }
+    #vesselList li.active { background:var(--accent-soft); border-color:var(--accent-border); }
+    .vessel-name { font-weight:600; font-size:clamp(10px, 1.2vw, 11px); }
+    .vessel-meta { font-size:clamp(9px, 1.1vw, 10px); color:var(--muted); display:flex; flex-direction:column; gap:2px; margin-top:1px; }
+    .meta-row { display:flex; flex-wrap:wrap; gap:4px; }
+    .badge { padding:1px 6px; border-radius:999px; border:1px solid var(--border-subtle); background:#f3f4f6; }
+    #map {
+      width:100%; height:100%; border-radius:12px; border:1px solid var(--border-subtle);
+      overflow:hidden; box-shadow: var(--shadow-soft);
+    }
+    .leaflet-container { background:#dbeafe; }
+
+    .cursor-info{
+      background:rgba(255,255,255,0.9);
+      border:1px solid var(--border-subtle);
+      border-radius:999px;
+      padding:2px 8px;
+      font-size:10px;
+      color:#0f172a;
+      box-shadow:0 1px 3px rgba(15,23,42,0.3);
+      margin-bottom:4px;
+    }
+    .nautical-scale{
+      background:rgba(255,255,255,0.9);
+      border:1px solid var(--border-subtle);
+      border-radius:4px;
+      padding:3px 6px 4px 6px;
+      font-size:10px;
+      color:#0f172a;
+      box-shadow:0 1px 3px rgba(15,23,42,0.3);
+    }
+    .nautical-scale-bar{
+      height:3px;
+      background:#0f172a;
+      margin-bottom:3px;
+    }
+    .nautical-scale-label{
+      text-align:center;
+    }
+    .fleet-home-btn{
+      background:rgba(255,255,255,0.95);
+      border:1px solid var(--border-subtle);
+      border-radius:999px;
+      padding:3px 8px;
+      font-size:11px;
+      color:#0f172a;
+      box-shadow:0 1px 4px rgba(15,23,42,0.25);
+      cursor:pointer;
+      margin-bottom:4px;
+    }
+    .fleet-home-btn:hover{
+      background:#eff6ff;
+    }
+    .measure-btn.active{
+      background:#0f172a;
+      color:#f9fafb;
+    }
+    .nautical-distance-label{
+      background:rgba(15,23,42,0.92);
+      color:#f9fafb;
+      border-radius:999px;
+      padding:2px 8px;
+      font-size:10px;
+      box-shadow:0 2px 6px rgba(15,23,42,0.4);
+      white-space:nowrap;
+    }
+
+    .fleet-home-btn{
+      background:rgba(255,255,255,0.95);
+      border:1px solid var(--border-subtle);
+      border-radius:999px;
+      padding:3px 8px;
+      font-size:11px;
+      color:#0f172a;
+      box-shadow:0 1px 4px rgba(15,23,42,0.25);
+      cursor:pointer;
+    }
+    .fleet-home-btn:hover{
+      background:#eff6ff;
+    }
+    .boat-icon-wrapper { transform:translate(-50%,-50%); }
+    .boat-marker {
+      position:relative; width:16px; height:8px; border-radius:3px;
+      background:var(--boat-color,#0ea5e9); box-shadow:0 0 0 1px rgba(148,163,184,0.8);
+      transform-origin:50% 50%;
+    }
+    .boat-marker::after {
+      content:""; position:absolute; top:0; right:-5px; border-style:solid;
+      border-width:4px 0 4px 5px; border-color:transparent transparent transparent var(--boat-color,#0ea5e9);
+    }
+    .boat-marker::before {
+      content:""; position:absolute; top:50%; left:100%; height:2px;
+      width:var(--boat-vector,0px); background:var(--boat-color,#0ea5e9);
+      transform:translateY(-50%); opacity:.9;
+    }
+    .port-marker {
+      position:relative; width:14px; height:14px; border-radius:4px;
+      background:#ffffff; border:2px solid var(--boat-color,#0ea5e9);
+      box-shadow:0 0 0 1px rgba(148,163,184,0.6);
+      display:flex; align-items:center; justify-content:center;
+      font-size:9px; font-weight:700; color:#111827;
+    }
+    .vessel-label {
+      background: rgba(255,255,255,0.95); color: #000000; border: 1px solid #d1d5db;
+      border-radius: 999px; padding: 1px 6px; font-size: 10px; font-weight: 500;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.15);
+    }
+    
+    
+    @media (min-width:1400px) {
+      main{
+        grid-template-columns: minmax(420px, 1.6fr) minmax(520px, 1.4fr); /* lista ~53%, mapa ~47% */
+      }
+      #vesselList{
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap:6px;
+      }
+      #vesselList li{
+        font-size:11px;
+        padding:4px 6px;
+      }
+    }
+
+@media (max-width:600px){
+      header{padding:4px 8px;}
+      main{padding:4px; gap:4px;}
+      #sidebar{padding:4px 6px;}
+      #vesselList li{padding:2px 4px;}
+    }
+
+    @media (max-width:900px){
+      body{overflow:auto;}
+      main{
+        grid-template-columns:1fr;
+        grid-template-rows:auto minmax(260px, 50vh);
+      }
+      #map{min-height:260px;}
+    }
+
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Visualizador Flota Cerquera Industrial Talcahuano</h1>
+    </div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+      <label class="pill">
+        <span class="pill-dot"></span>
+        <span>Cargar datos flota</span>
+        <input type="file" id="fileInput" accept=".csv,.json" />
+      </label>
+    </div>
+  </header>
+  <main>
+    <section id="sidebar">
+      <header>
+        <h2>Flota</h2>
+        <div id="summary">Sin datos cargados.</div>
+        <div id="dataInfo" class="data-info">Datos obtenidos: sin información de fecha/hora</div>
+      </header>
+      <div id="filters" style="display:flex; gap:6px; margin:4px 0 2px 0; flex-wrap:wrap; align-items:center;">
+        <select id="filterPesquera" style="font-size:10px; padding:2px 4px; border-radius:999px; border:1px solid var(--border-subtle);">
+          <option value="">Todas las pesqueras</option>
+        </select>
+        <select id="filterEstado" style="font-size:10px; padding:2px 4px; border-radius:999px; border:1px solid var(--border-subtle);">
+          <option value="">Todos los estados</option>
+        </select>
+        <label style="display:inline-flex; align-items:center; gap:4px; font-size:10px; cursor:pointer;">
+          <input type="checkbox" id="filterMoving" style="margin:0;">
+          <span>Solo en movimiento (&gt; 0.5 kn)</span>
+        </label>
+      </div>
+      <ul id="vesselList"></ul>
+    </section>
+    <section id="map"></section>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const COMPANY_COLORS = {
+      "nutrisco":"#f97316","camanchaca":"#2563eb","landes":"#0ea5e9",
+      "blumar":"#059669","alimar":"#7c3aed","foodcorp":"#ef4444",
+      "litoral":"#65a30d","litoral pesquera":"#65a30d",
+      "lota portein":"#eab308"
+    };
+    const DEFAULT_COLOR = "#0ea5e9";
+    const getColorForCompany = name => COMPANY_COLORS[String(name||"").toLowerCase().trim()] || DEFAULT_COLOR;
+
+    // Mapeo de nombre de nave -> pesquera (según listado proporcionado)
+    const PESQUERA_BY_NAME = {
+      "don manuel":"Alimar",
+      "querelema":"Alimar",
+      "vichuquen ii":"Alimar",
+      "javier":"Litoral",
+      "cobra":"Blumar",
+      "don alfonso":"Blumar",
+      "don edmundo":"Blumar",
+      "erika":"Blumar",
+      "rapanui":"Blumar",
+      "yelcho i":"Blumar",
+      "bucanero i":"Camanchaca",
+      "corsario i":"Camanchaca",
+      "maria jose":"Camanchaca",
+      "pehuenco":"Camanchaca",
+      "pelicano":"Camanchaca",
+      "alf":"Foodcorp",
+      "cazador":"Foodcorp",
+      "ruth":"Foodcorp",
+      "talbor":"Foodcorp",
+      "coral i":"Landes",
+      "don boris":"Landes",
+      "don tito":"Landes",
+      "santa maria ii":"Lota Portein",
+      "centinela i":"Nutrisco",
+      "don julio":"Nutrisco",
+      "lider":"Nutrisco",
+      "lonco":"Nutrisco",
+      "san jose":"Nutrisco",
+      "ventisquero":"Nutrisco",
+      "vesterveg":"Nutrisco"
+    };
+
+    function normalizeName(str){
+      return String(str||"").trim().toLowerCase();
+    }
+
+    function cleanQuotes(str){
+      if(str == null) return "";
+      let s = String(str).trim();
+      if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+        s = s.slice(1, -1).trim();
+      }
+      return s;
+    }
+
+    function inferPesqueraFromName(name){
+      const key = normalizeName(name);
+      return PESQUERA_BY_NAME[key] || "";
+    }
+
+    // Normalización de estados (AIS / MarineTraffic) a categorías en español
+    function mapEstadoRaw(raw){
+      const s = normalizeName(raw);
+      if(!s) return "";
+      if(s.includes("under way") || s.includes("en navegación") || s.includes("en navegacion")){
+        return "En navegación";
+      }
+      if(s.includes("moored") || s.includes("berthed") || s.includes("at anchor") || s.includes("anchored") || s.includes("fondeado")){
+        return "Fondeado / Atraque";
+      }
+      if(s.includes("aground")){
+        return "Varado";
+      }
+      if(s.includes("not under command") || s.includes("restricted manoeuvrability")){
+        return "Maniobra restringida";
+      }
+      if(s.includes("constrained by her draught")){
+        return "Restringido por calado";
+      }
+      if(s.includes("adrift") || s.includes("drifting")){
+        return "A la deriva";
+      }
+      if(s.includes("fishing")){
+        return "En faena de pesca";
+      }
+      if(s.includes("sailing")){
+        return "A vela";
+      }
+      if(s.includes("puerto") || s.includes("harbour") || s.includes("harbor")){
+        return "En puerto";
+      }
+      // Si no coincide con nada conocido, devolvemos el texto original
+      return raw;
+    }
+
+    function parseCoordinateRaw(val,isLat){
+      if(val==null)return NaN;
+      let s=String(val).trim();
+      if(!s)return NaN;
+      s=s.replace(",",".");
+      if(/[°'"NnSsEeWw]/.test(s)){
+        const r=/(\d+(?:\.\d+)?)[^\d]+(\d+(?:\.\d+)?)[^\d]+(\d+(?:\.\d+)?)[^0-9]*([NnSsEeWw])?/;
+        const m=s.match(r);
+        if(m){
+          const deg=parseFloat(m[1]), min=parseFloat(m[2]), sec=parseFloat(m[3]);
+          let hemi=m[4]?m[4].toUpperCase():null;
+          let dec=deg+min/60+sec/3600;
+          if(!hemi){ if(s.includes("-")) dec=-dec; }
+          else if(hemi==="S"||hemi==="W") dec=-dec;
+          if(!hemi && isLat && dec>90) return NaN;
+          if(!hemi && !isLat && dec>180) return NaN;
+          return dec;
+        }
+      }
+      const num=parseFloat(s);
+      return Number.isNaN(num)?NaN:num;
+    }
+    function forceSouth(lat){ return (!isNaN(lat) && lat>0 && lat>=15 && lat<=60) ? -Math.abs(lat) : lat; }
+    function forceWest(lon){ return (!isNaN(lon) && lon>0 && lon>=50 && lon<=90) ? -Math.abs(lon) : lon; }
+
+    function valOrNull(x){ return (x===undefined||x===null||x==="") ? null : x; }
+    function numOrNull(x){ const n = Number(String(x).replace(",",".")); return Number.isFinite(n)?n:null; }
+
+    // Parse "36° 43' 37.7"" S / 073° 07' 47.5"" W" into lat/lon
+    function parsePuertoPair(val){
+      if(val==null) return {lat: NaN, lon: NaN};
+      let s = String(val).replace(/"/g,"").trim();
+      if(!s) return {lat: NaN, lon: NaN};
+      const parts = s.split("/");
+      if(parts.length < 2) return {lat: NaN, lon: NaN};
+      const lat = parseCoordinateRaw(parts[0].trim(), true);
+      const lon = parseCoordinateRaw(parts[1].trim(), false);
+      return {lat, lon};
+    }
+
+    const map=L.map("map").setView([-36.5,-73.0],4);
+
+// Capas base
+const baseOSM = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:18,
+  attribution:'&copy; OpenStreetMap'
+});
+const satImagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{
+  maxZoom:18,
+  attribution:'&copy; Esri World Imagery'
+});
+const satLabels = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",{
+  maxZoom:18,
+  attribution:'&copy; Esri Boundaries & Places'
+});
+const baseSat = L.layerGroup([satImagery, satLabels]);
+
+// Capa de batimetría oceánica (GEBCO WMS - relieve global)
+const baseBathy = L.tileLayer.wms("https://wms.gebco.net/mapserv?",{
+  layers: "GEBCO_latest",
+  format: "image/png",
+  transparent: false,
+  attribution: "&copy; GEBCO / Seabed 2030"
+});
+
+// Capa de cartas náuticas (OpenSeaMap)
+const overlaySea = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png",{
+  maxZoom:18,
+  attribution:"&copy; OpenSeaMap"
+});
+
+// Añadir base por defecto
+baseOSM.addTo(map);
+
+// Control de capas
+const baseLayers = {
+  "Mapa": baseOSM,
+  "Satélite + nombres": baseSat,
+  "Batimetría GEBCO (oceánica)": baseBathy
+};
+// Capa de límites de ZEE (200 MN) mundial - incluye Chile
+const overlayEEZ = L.tileLayer.wms("https://geo.vliz.be/geoserver/MarineRegions/wms?",{
+  layers: "MarineRegions:eez_boundaries",
+  format: "image/png",
+  transparent: true,
+  attribution: "&copy; VLIZ Maritime Boundaries v12 (EEZ 200NM)"
+});
+
+const overlayLayers = {
+  "Cartas náuticas": overlaySea,
+  "Límite 200 MN (EEZ mundial)": overlayEEZ
+};
+L.control.layers(baseLayers, overlayLayers, {collapsed:true}).addTo(map);
+
+// Activar por defecto el límite de 200 MN
+overlayEEZ.addTo(map);
+
+    // Botón personalizado para centrar la vista en toda la flota
+    const FleetHomeControl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function () {
+        const btn = L.DomUtil.create('button', 'fleet-home-btn');
+        btn.type = 'button';
+        btn.innerHTML = '⤢ Flota';
+        L.DomEvent.on(btn, 'click', () => {
+          if (lastBounds && lastBounds.length > 0) {
+            map.fitBounds(lastBounds, {padding:[30,30]});
+          } else {
+            map.setView([-36.5,-73.0],4);
+          }
+        });
+        L.DomEvent.disableClickPropagation(btn);
+        return btn;
+      }
+    });
+    map.addControl(new FleetHomeControl());
+
+
+
+    // Control de escala en millas náuticas
+    function getNiceNm(maxNm){
+      const steps = [0.5, 1, 2, 5, 10, 20, 50, 100];
+      let nice = steps[0];
+      for (let i=0; i<steps.length; i++){
+        if (steps[i] <= maxNm) nice = steps[i];
+      }
+      return nice;
+    }
+
+    const NauticalScaleControl = L.Control.extend({
+      options: { position: 'bottomright', maxWidth: 120 },
+      onAdd: function () {
+        const container = L.DomUtil.create('div','nautical-scale');
+        this._bar = L.DomUtil.create('div','nautical-scale-bar', container);
+        this._label = L.DomUtil.create('div','nautical-scale-label', container);
+        this._update = this._update.bind(this);
+        map.on('move zoom', this._update, this);
+        this._update();
+        return container;
+      },
+      onRemove: function () {
+        map.off('move zoom', this._update, this);
+      },
+      _update: function () {
+        const maxWidth = this.options.maxWidth || 120;
+        const center = map.getCenter();
+        const p1 = map.latLngToContainerPoint(center);
+        const p2 = L.point(p1.x + maxWidth, p1.y);
+        const ll1 = map.containerPointToLatLng(p1);
+        const ll2 = map.containerPointToLatLng(p2);
+        const distMeters = map.distance(ll1, ll2);
+        if (!distMeters || distMeters <= 0) return;
+        const maxNm = distMeters / 1852.0;
+        const niceNm = getNiceNm(maxNm);
+        const mPerPx = distMeters / maxWidth;
+        const widthPx = (niceNm * 1852.0) / mPerPx;
+        this._bar.style.width = widthPx + 'px';
+        this._label.textContent = niceNm.toString() + ' MN';
+      }
+    });
+    map.addControl(new NauticalScaleControl());
+
+    // Control para mostrar lat/lon del cursor en DMS
+    let cursorDiv = null;
+    function toDMS(deg, isLat){
+      const abs = Math.abs(deg);
+      const d = Math.floor(abs);
+      const minFloat = (abs - d) * 60;
+      const m = Math.floor(minFloat);
+      const s = (minFloat - m) * 60;
+      const hemi = isLat ? (deg >= 0 ? 'N' : 'S') : (deg >= 0 ? 'E' : 'W');
+      return `${d.toString().padStart(isLat?2:3,'0')}° ${m.toString().padStart(2,'0')}' ${s.toFixed(1).padStart(4,'0')}" ${hemi}`;
+    }
+
+    const CursorControl = L.Control.extend({
+      options: { position: 'bottomleft' },
+      onAdd: function () {
+        const div = L.DomUtil.create('div','cursor-info');
+        div.textContent = 'Cursor: --';
+        cursorDiv = div;
+        return div;
+      }
+    });
+    map.addControl(new CursorControl());
+
+    map.on('mousemove', function(e){
+      if(!cursorDiv) return;
+      const lat = e.latlng.lat;
+      const lon = e.latlng.lng;
+      cursorDiv.textContent = 'Cursor: ' + toDMS(lat,true) + ' / ' + toDMS(lon,false);
+    });
+    map.on('mouseout', function(){
+      if(cursorDiv) cursorDiv.textContent = 'Cursor: --';
+    });
+
+    // Herramienta de medición en millas náuticas
+    let measuring = false;
+    let measureStart = null;
+    let measureLine = null;
+    let measureMarker = null;
+
+    function resetMeasure(){
+      measureStart = null;
+      if(measureLine){ map.removeLayer(measureLine); measureLine = null; }
+      if(measureMarker){ map.removeLayer(measureMarker); measureMarker = null; }
+    }
+
+    const MeasureControl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function () {
+        const btn = L.DomUtil.create('button', 'fleet-home-btn measure-btn');
+        btn.type = 'button';
+        btn.innerHTML = '📏 MN';
+        L.DomEvent.on(btn, 'click', () => {
+          measuring = !measuring;
+          btn.classList.toggle('active', measuring);
+          resetMeasure();
+        });
+        L.DomEvent.disableClickPropagation(btn);
+        return btn;
+      }
+    });
+    map.addControl(new MeasureControl());
+
+    function handleMeasurePoint(latlng){
+      if(!measuring) return;
+      if(!measureStart){
+        measureStart = latlng;
+      } else {
+        const distMeters = map.distance(measureStart, latlng);
+        const distNm = distMeters / 1852.0;
+        const latlngs = [measureStart, latlng];
+        if(measureLine){ map.removeLayer(measureLine); }
+        if(measureMarker){ map.removeLayer(measureMarker); }
+        measureLine = L.polyline(latlngs,{color:'#111827', weight:2, dashArray:'4,4'}).addTo(map);
+        const mid = L.latLng(
+          (measureStart.lat + latlng.lat)/2,
+          (measureStart.lng + latlng.lng)/2
+        );
+        measureMarker = L.marker(mid,{
+          interactive:false,
+          icon:L.divIcon({
+            className:'nautical-distance-label',
+            html: distNm.toFixed(2) + ' MN'
+          })
+        }).addTo(map);
+        measureStart = null;
+      }
+    }
+
+    map.on('click', function(e){
+      handleMeasurePoint(e.latlng);
+    });
+
+const fileInput=document.getElementById("fileInput");
+    const summaryEl=document.getElementById("summary");
+    const filterPesquera=document.getElementById("filterPesquera");
+    const filterEstado=document.getElementById("filterEstado");
+    const filterMoving=document.getElementById("filterMoving");
+    const dataInfoEl=document.getElementById("dataInfo");
+    const vesselListEl=document.getElementById("vesselList");
+    let markers=[], vessels=[], allVessels=[], lastBounds=null;
+
+    function looksLikeJSON(str){const t=str.trim(); return t.startsWith("{")||t.startsWith("[");}
+    function getUnique(list, key){
+      const set = new Set();
+      list.forEach(v => {
+        const val = (v[key] || "").toString().trim();
+        if(val) set.add(val);
+      });
+      return Array.from(set).sort((a,b)=>a.localeCompare(b,"es"));
+    }
+
+    function populateFilters(vs){
+      const pesqs = getUnique(vs, "pesquera");
+      const estados = getUnique(vs, "estado");
+      filterPesquera.innerHTML = '<option value="">Todas las pesqueras</option>' +
+        pesqs.map(p=>`<option value="${p}">${p}</option>`).join("");
+      filterEstado.innerHTML = '<option value="">Todos los estados</option>' +
+        estados.map(e=>`<option value="${e}">${e}</option>`).join("");
+    }
+
+    function applyFilters(){
+      const p = (filterPesquera.value || "").trim();
+      const e = (filterEstado.value || "").trim();
+      const movingOnly = filterMoving && filterMoving.checked;
+      return allVessels.filter(v=>{
+        const vp = (v.pesquera || "").trim();
+        const ve = (v.estado || "").trim();
+        const speed = v.sog;
+        const okMoving = !movingOnly || (speed!=null && !Number.isNaN(speed) && speed>0.5);
+        return (p==="" || vp===p) && (e==="" || ve===e) && okMoving;
+      });
+    }
+
+    function parseUTCFromTimestamp(str){
+      if(!str) return null;
+      const s = String(str).trim();
+      // Intentar parsear directamente (ISO u otros formatos estándar)
+      const d1 = new Date(s);
+      if(!Number.isNaN(d1.getTime())) return d1;
+      // Intentar formato "YYYY-MM-DD HH:MM[:SS]"
+      const m = s.match(/(\d{4})[-\/](\d{2})[-\/](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+      if(m){
+        const year  = Number(m[1]);
+        const month = Number(m[2]) - 1;
+        const day   = Number(m[3]);
+        const hour  = Number(m[4]);
+        const min   = Number(m[5]);
+        const sec   = m[6] ? Number(m[6]) : 0;
+        return new Date(Date.UTC(year, month, day, hour, min, sec));
+      }
+      return null;
+    }
+
+    function formatCLFromUTC(dateUTC){
+      if(!dateUTC) return "";
+      // Chile continental: UTC-3
+      const localMs = dateUTC.getTime() - 3*60*60*1000;
+      const d = new Date(localMs);
+      const dd = String(d.getUTCDate()).padStart(2,"0");
+      const mm = String(d.getUTCMonth()+1).padStart(2,"0");
+      const yyyy = d.getUTCFullYear();
+      const hh = String(d.getUTCHours()).padStart(2,"0");
+      const mi = String(d.getUTCMinutes()).padStart(2,"0");
+      return `${dd}-${mm}-${yyyy} ${hh}:${mi}`;
+    }
+
+    function updateDataInfo(vs){
+      if(!dataInfoEl) return;
+      const counts = new Map();
+      for(const v of vs){
+        if(v.timestamp && String(v.timestamp).trim() !== ""){
+          const raw = String(v.timestamp).trim();
+          const prev = counts.get(raw) || 0;
+          counts.set(raw, prev + 1);
+        }
+      }
+      if(counts.size === 0){
+        dataInfoEl.textContent = "Datos obtenidos: sin información de fecha/hora";
+        return;
+      }
+
+      // Buscar la fecha/hora que más se repite (moda)
+      let bestRaw = "";
+      let bestCount = 0;
+      for(const [raw,c] of counts.entries()){
+        if(c > bestCount){
+          bestCount = c;
+          bestRaw = raw;
+        }
+      }
+
+      const d = parseUTCFromTimestamp(bestRaw);
+      if(d && !Number.isNaN(d.getTime())){
+        const label = formatCLFromUTC(d);
+        dataInfoEl.textContent = "Hora de posición más frecuente: " + label;
+      } else {
+        dataInfoEl.textContent = "Hora de posición más frecuente: " + bestRaw;
+      }
+    }
+
+
+
+    function parseJSON(text){
+      const data=JSON.parse(text);
+      const arr=Array.isArray(data)?data:data.vessels;
+      if(!Array.isArray(arr)) throw new Error("JSON sin lista de barcos clara.");
+      return arr.map((v,i)=>{
+        let lat=parseCoordinateRaw(v.lat,true);
+        let lon=parseCoordinateRaw(v.lon,false);
+        let pLat=null, pLon=null;
+        const puertoField = v.puerto || v.Puerto || v.port || v.port_position || "";
+        if (puertoField) {
+          const pp = parsePuertoPair(puertoField);
+          pLat = pp.lat; pLon = pp.lon;
+        } else {
+          pLat=parseCoordinateRaw(v.puerto_lat||v.port_lat||v.cabecera_puerto_lat||v.lat_puerto||v.puertoLat||"",true);
+          pLon=parseCoordinateRaw(v.puerto_lon||v.port_lon||v.cabecera_puerto_lon||v.lon_puerto||v.puertoLon||"",false);
+        }
+        lat = forceSouth(lat); lon = forceWest(lon);
+        pLat = forceSouth(pLat); pLon = forceWest(pLon);
+        if(Number.isNaN(lat)) lat = null;
+        if(Number.isNaN(lon)) lon = null;
+        if(Number.isNaN(pLat)) pLat = null;
+        if(Number.isNaN(pLon)) pLon = null;
+        return {
+          pesquera: v.pesquera||v.empresa||v.company||"",
+          name: v.name||v.vessel||v.ship||`Barco ${String(i+1).padStart(3,"0")}`,
+          lat, lon,
+          portLat: pLat, portLon: pLon,
+          sog: numOrNull(v.sog),
+          cog: numOrNull(v.cog),
+          timestamp: valOrNull(v.timestamp||v.time||v.datetime||v.fecha),
+          eslora: numOrNull(v.eslora),
+          estado: (v.estado||"").trim()
+        };
+      });
+    }
+
+    function parseCSV(text){
+      const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+      if(lines.length<2) throw new Error("CSV vacío.");
+      const headerLine=lines[0];
+      const commaCount=(headerLine.match(/,/g)||[]).length;
+      const semiCount=(headerLine.match(/;/g)||[]).length;
+      const delim=semiCount>commaCount?";":",";
+      const headersRaw=headerLine.split(delim).map(h=>h.trim());
+      const headers=headersRaw.map(h=>h.toLowerCase());
+      const idx=names=>headers.findIndex(h=>names.some(n=>h===n||h.includes(n)));
+
+      // Forzar uso de columnas "Latitude" y "Longitude" cuando existan
+      const latExact=headers.indexOf("latitude");
+      const lonExact=headers.indexOf("longitude");
+
+      const pesqIdx=idx(["pesquera","empresa","company","owner","operator"]);
+      const latIdx=latExact!==-1?latExact:idx(["lat","latitude"]);
+      const lonIdx=lonExact!==-1?lonExact:idx(["lon","lng","long","longitude"]);
+      const nameIdx=idx(["name","vessel","ship","shipname"]);
+      const sogIdx=idx(["sog","speed","speed_kn","speed_kts"]);
+      const cogIdx=idx(["cog","course","heading"]);
+      const tsIdx=idx(["time of latest position","timestamp","time","datetime","fecha","received"]);
+      const esloraIdx=idx(["eslora","length","length_overall"]);
+      const estadoIdx=idx(["estado","status","nav_status","navigational status"]);
+      const pLatIdx=idx(["puerto_lat","port_lat","cabecera_puerto_lat","lat_puerto","port latitude"]);
+      const pLonIdx=idx(["puerto_lon","port_lon","cabecera_puerto_lon","lon_puerto","port longitude"]);
+      const puertoIdx=idx(["puerto","port","cabecera","harbour","harbor"]);
+      const out=[];
+      for(let i=1;i<lines.length;i++){
+        const cols=lines[i].split(delim);
+        if(cols.length<2) continue;
+        let lat=parseCoordinateRaw(cols[latIdx]||"",true);
+        let lon=parseCoordinateRaw(cols[lonIdx]||"",false);
+        let pLat=null, pLon=null;
+        if (puertoIdx !== -1 && (cols[puertoIdx]||"").trim() !== "") {
+          const pp = parsePuertoPair(cols[puertoIdx]);
+          pLat = pp.lat; pLon = pp.lon;
+        } else {
+          pLat=parseCoordinateRaw(pLatIdx!==-1?(cols[pLatIdx]||""):"",true);
+          pLon=parseCoordinateRaw(pLonIdx!==-1?(cols[pLonIdx]||""):"",false);
+        }
+        lat = forceSouth(lat); lon = forceWest(lon);
+        pLat = forceSouth(pLat); pLon = forceWest(pLon);
+        if(Number.isNaN(lat)) lat = null;
+        if(Number.isNaN(lon)) lon = null;
+        if(Number.isNaN(pLat)) pLat = null;
+        if(Number.isNaN(pLon)) pLon = null;
+        let rawPesquera = pesqIdx!==-1?(cols[pesqIdx]||"").trim():"";
+        let rawName = nameIdx!==-1?(cols[nameIdx]||"").trim():`Barco ${i.toString().padStart(3,"0")}`;
+        rawName = cleanQuotes(rawName);
+        // Si no viene pesquera en el archivo, la inferimos según el nombre
+        let pesquera = rawPesquera || inferPesqueraFromName(rawName);
+
+        const vessel={
+          pesquera,
+          name: rawName,
+          lat, lon, portLat: pLat, portLon: pLon,
+          sog: sogIdx!==-1?numOrNull(cols[sogIdx]):null,
+          cog: cogIdx!==-1?numOrNull(cols[cogIdx]):null,
+          timestamp: tsIdx!==-1?valOrNull(cols[tsIdx]):"",
+          eslora: esloraIdx!==-1?numOrNull(cols[esloraIdx]):null,
+          estado: estadoIdx!==-1?mapEstadoRaw((cols[estadoIdx]||"").trim()):""
+        };
+        out.push(vessel);
+      }
+      return out;
+    }
+
+    function clearMarkers(){markers.forEach(m=>{if(m) m.remove();}); markers=[];}
+
+    function renderVessels(vs){
+      clearMarkers(); vesselListEl.innerHTML="";
+      if(!vs||vs.length===0){summaryEl.textContent="Sin datos válidos en el archivo cargado."; return;}
+
+      // Ordenar barcos por pesquera y luego por nombre
+      vs = [...vs].sort((a,b)=>{
+        const pa = String(a.pesquera||"").toLowerCase().trim();
+        const pb = String(b.pesquera||"").toLowerCase().trim();
+        if(pa<pb) return -1;
+        if(pa>pb) return 1;
+        const na = String(a.name||"").toLowerCase().trim();
+        const nb = String(b.name||"").toLowerCase().trim();
+        if(na<nb) return -1;
+        if(na>nb) return 1;
+        return 0;
+      });
+
+      summaryEl.textContent=`Barcos: ${vs.length.toLocaleString("es-CL")}`;
+      const bounds=[];
+      vs.forEach((v,idx)=>{
+        const color=getColorForCompany(v.pesquera);
+        const sog=(v.sog!=null && !Number.isNaN(v.sog))?v.sog:null;
+        const cog=(v.cog!=null && !Number.isNaN(v.cog))?v.cog:null;
+
+        const isPuerto = String(v.estado||"").toLowerCase().trim()==="puerto";
+        const plotLat = isPuerto && Number.isFinite(v.portLat) ? v.portLat : v.lat;
+        const plotLon = isPuerto && Number.isFinite(v.portLon) ? v.portLon : v.lon;
+
+        const hasPosition = (plotLat!=null && plotLon!=null && Number.isFinite(plotLat) && Number.isFinite(plotLon));
+        let marker=null;
+
+        if(hasPosition){
+          if(isPuerto){
+            const iconHtml = `<div class="port-marker" style="--boat-color:${color}">P</div>`;
+            const icon=L.divIcon({className:"boat-icon-wrapper",html:iconHtml,iconSize:[14,14],iconAnchor:[7,7]});
+            marker=L.marker([plotLat,plotLon],{icon});
+          } else if(sog!==null && sog>1 && cog!==null){
+            const rotation=cog-90;
+            const cappedSpeed=Math.min(Math.max(sog,1),20);
+            const vectorLen=5+cappedSpeed;
+            const iconHtml=`<div class="boat-marker" style="--boat-color:${color}; --boat-vector:${vectorLen}px; transform: rotate(${rotation}deg);"></div>`;
+            const icon=L.divIcon({className:"boat-icon-wrapper",html:iconHtml,iconSize:[16,8],iconAnchor:[8,4]});
+            marker=L.marker([plotLat,plotLon],{icon});
+          } else {
+            marker=L.circleMarker([plotLat,plotLon],{radius:4,weight:1,color:color,fillColor:color,fillOpacity:0.9});
+          }
+        }
+
+        const popupLines=[];
+        popupLines.push(`<strong>${escapeHtml(v.name||"Sin nombre")}</strong>`);
+        if(v.pesquera) popupLines.push(`Pesquera: ${escapeHtml(v.pesquera)}`);
+        if(hasPosition){
+          if(isPuerto){
+            popupLines.push(`Posición: puerto (${plotLat.toFixed(4)}, ${plotLon.toFixed(4)})`);
+          } else {
+            popupLines.push(`Posición: ${plotLat.toFixed(4)}, ${plotLon.toFixed(4)}`);
+          }
+        } else {
+          popupLines.push(`Sin posición GPS`);
+        }
+        if(v.eslora!=null && Number.isFinite(v.eslora)) popupLines.push(`Eslora: ${v.eslora.toFixed(1)} m`);
+        if(v.estado) popupLines.push(`Estado: ${escapeHtml(v.estado)}`);
+        if(sog!==null) popupLines.push(`Velocidad: ${sog.toFixed(1)} kn`);
+        if(cog!==null) popupLines.push(`Rumbo: ${cog.toFixed(0)}°`);
+
+        if(marker){
+          marker.bindPopup(popupLines.join("<br/>"));
+          if (v.name) {
+            marker.bindTooltip(escapeHtml(v.name), {direction:"top", offset:[0,-4], className:"vessel-label", sticky:true});
+          }
+          marker.on('click', function(ev){
+            if(measuring){
+              handleMeasurePoint(ev.latlng);
+              L.DomEvent.stop(ev);
+            }
+          });
+          marker.addTo(map);
+          markers.push(marker);
+          bounds.push([plotLat,plotLon]);
+        }else{
+          markers.push(null);
+        }
+
+        const li=document.createElement("li"); li.dataset.index=idx;
+        const title=document.createElement("div"); title.className="vessel-name"; title.textContent=v.name||"Sin nombre";
+        const meta=document.createElement("div"); meta.className="vessel-meta";
+
+        // fila 1: pesquera + estado
+        const row1=document.createElement("div"); row1.className="meta-row";
+        if(v.pesquera){
+          const b=document.createElement("span");
+          b.className="badge";
+          b.textContent=v.pesquera;
+          b.style.borderColor=color;
+          b.style.color=color;
+          row1.appendChild(b);
+        }
+        if(v.estado){
+          const b=document.createElement("span");
+          b.className="badge";
+          b.textContent=v.estado;
+          row1.appendChild(b);
+        }
+
+        // fila 2: SOG + COG + "Sin posición" si aplica
+        const row2=document.createElement("div"); row2.className="meta-row";
+        if(sog!==null){
+          const b=document.createElement("span");
+          b.className="badge";
+          b.textContent=`${sog.toFixed(1)} kn`;
+          row2.appendChild(b);
+        }
+        if(cog!==null){
+          const b=document.createElement("span");
+          b.className="badge";
+          b.textContent=`${cog.toFixed(0)}°`;
+          row2.appendChild(b);
+        }
+        if(!hasPosition){
+          const b=document.createElement("span");
+          b.className="badge";
+          b.textContent="Sin posición";
+          row2.appendChild(b);
+        }
+
+        if(row1.children.length>0) meta.appendChild(row1);
+        if(row2.children.length>0) meta.appendChild(row2);
+
+        li.appendChild(title); li.appendChild(meta);
+        li.addEventListener("click",()=>{
+          document.querySelectorAll("#vesselList li.active").forEach(el=>el.classList.remove("active"));
+          li.classList.add("active");
+          const m=markers[idx];
+          if(m){map.setView(m.getLatLng(),Math.max(map.getZoom(),6),{animate:true}); m.openPopup();}
+        });
+        vesselListEl.appendChild(li);
+      });
+      if(bounds.length>0){
+        lastBounds = bounds;
+        map.fitBounds(bounds,{padding:[30,30]});
+      } else {
+        lastBounds = null;
+      }
+    }
+
+    
+    const DEFAULT_CSV_URL = "MarineTraffic_Vessels_Export_2025-11-10.csv";
+
+    function loadTextData(text){
+      try{
+        if(looksLikeJSON(text)) allVessels=parseJSON(text);
+        else allVessels=parseCSV(text);
+        populateFilters(allVessels);
+        updateDataInfo(allVessels);
+        renderVessels(applyFilters());
+      }catch(err){
+        console.error(err);
+        alert("No se pudieron leer los datos. Revisa el formato del archivo (CSV o JSON).");
+      }
+    }
+
+    async function loadDefaultCSV(){
+      try{
+        const resp = await fetch(DEFAULT_CSV_URL);
+        if(!resp.ok){
+          console.warn("No se pudo cargar el CSV por defecto:", resp.status, resp.statusText);
+          return;
+        }
+        const text = await resp.text();
+        loadTextData(text);
+      }catch(err){
+        console.error("Error al cargar CSV por defecto", err);
+      }
+    }
+
+function fileReaderHandler(ev){
+      const text=ev.target.result;
+      loadTextData(text);
+    }
+
+    fileInput.addEventListener("change",e=>{
+      const file=e.target.files[0]; if(!file)return;
+      const reader=new FileReader(); reader.onload=fileReaderHandler; reader.readAsText(file,"utf-8");
+    });
+
+    filterPesquera.addEventListener("change", ()=>{
+      if(allVessels.length>0) renderVessels(applyFilters());
+    });
+    filterEstado.addEventListener("change", ()=>{
+      if(allVessels.length>0) renderVessels(applyFilters());
+    });
+    if(filterMoving){
+      filterMoving.addEventListener("change", ()=>{
+        if(allVessels.length>0) renderVessels(applyFilters());
+      });
+    }
+
+    // Cargar automáticamente el CSV por defecto al abrir la página
+    document.addEventListener("DOMContentLoaded", ()=>{
+      loadDefaultCSV();
+    });
+
+    function escapeHtml(str){return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+  </script>
+</body>
+</html>
